@@ -3,13 +3,21 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/gorilla/mux"
 )
+
+var store string
+
+func storePath(filename string) string {
+	return filepath.Join(store, filename)
+}
 
 type fileResponse struct {
 	Name    string `json:"name"`
@@ -29,16 +37,22 @@ func handleFileResponse(w http.ResponseWriter, response fileResponse) {
 func handleCreate(w http.ResponseWriter, request *http.Request) {
 	pathParams := mux.Vars(request)
 	name := pathParams["name"]
-	_, errRead := ioutil.ReadFile(name)
+	filename := storePath(name)
+	_, errRead := ioutil.ReadFile(filename)
 	if errRead == nil {
 		errExists := errors.New("create: file exists already")
 		handleError(w, errExists, 400)
 	} else {
-		errWrite := ioutil.WriteFile(name, []byte("Test"), 0644)
-		if errWrite == nil {
-			handleRead(w, request)
+		content, errContent := ioutil.ReadAll(request.Body)
+		if errContent == nil {
+			errWrite := ioutil.WriteFile(filename, content, 0644)
+			if errWrite == nil {
+				handleRead(w, request)
+			} else {
+				handleError(w, errWrite, 400)
+			}
 		} else {
-			handleError(w, errWrite, 400)
+			handleError(w, errContent, 400)
 		}
 	}
 }
@@ -46,7 +60,8 @@ func handleCreate(w http.ResponseWriter, request *http.Request) {
 func handleRead(w http.ResponseWriter, request *http.Request) {
 	pathParams := mux.Vars(request)
 	name := pathParams["name"]
-	content, errRead := ioutil.ReadFile(name)
+	filename := storePath(name)
+	content, errRead := ioutil.ReadFile(filename)
 	if errRead == nil {
 		response := fileResponse{name, string(content)}
 		handleFileResponse(w, response)
@@ -58,13 +73,19 @@ func handleRead(w http.ResponseWriter, request *http.Request) {
 func handleUpdate(w http.ResponseWriter, request *http.Request) {
 	pathParams := mux.Vars(request)
 	name := pathParams["name"]
-	_, errRead := ioutil.ReadFile(name)
+	filename := storePath(name)
+	_, errRead := ioutil.ReadFile(filename)
 	if errRead == nil {
-		errWrite := ioutil.WriteFile(name, []byte("Test Updated"), 0644)
-		if errWrite == nil {
-			handleRead(w, request)
+		content, errContent := ioutil.ReadAll(request.Body)
+		if errContent == nil {
+			errWrite := ioutil.WriteFile(filename, content, 0644)
+			if errWrite == nil {
+				handleRead(w, request)
+			} else {
+				handleError(w, errWrite, 400)
+			}
 		} else {
-			handleError(w, errWrite, 400)
+			handleError(w, errContent, 400)
 		}
 	} else {
 		handleError(w, errRead, 400)
@@ -74,7 +95,8 @@ func handleUpdate(w http.ResponseWriter, request *http.Request) {
 func handleDelete(w http.ResponseWriter, request *http.Request) {
 	pathParams := mux.Vars(request)
 	name := pathParams["name"]
-	errRemove := os.Remove(name)
+	filename := storePath(name)
+	errRemove := os.Remove(filename)
 	if errRemove == nil {
 		message := []byte("delete: successfully removed file")
 		w.Write(message)
@@ -84,6 +106,8 @@ func handleDelete(w http.ResponseWriter, request *http.Request) {
 }
 
 func main() {
+	flag.StringVar(&store, "store", "./store", "path to the file storage directory")
+	flag.Parse()
 	router := mux.NewRouter()
 	router.HandleFunc("/{name}", handleCreate).Methods(http.MethodPost)
 	router.HandleFunc("/{name}", handleRead).Methods(http.MethodGet)
