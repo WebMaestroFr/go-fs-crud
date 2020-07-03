@@ -1,79 +1,94 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+	"errors"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
+	"os"
 
 	"github.com/gorilla/mux"
 )
 
-func get(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "get called"}`))
+type fileResponse struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
 }
 
-func post(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(`{"message": "post called"}`))
+func handleError(w http.ResponseWriter, err error, code int) {
+	http.Error(w, err.Error(), code)
 }
 
-func put(w http.ResponseWriter, r *http.Request) {
+func handleFileResponse(w http.ResponseWriter, response fileResponse) {
+	r, _ := json.Marshal(response)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte(`{"message": "put called"}`))
+	w.Write(r)
 }
 
-func delete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "delete called"}`))
-}
-
-func params(w http.ResponseWriter, r *http.Request) {
-	pathParams := mux.Vars(r)
-	w.Header().Set("Content-Type", "application/json")
-
-	userID := -1
-	var err error
-	if val, ok := pathParams["userID"]; ok {
-		userID, err = strconv.Atoi(val)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"message": "need a number"}`))
-			return
+func handleCreate(w http.ResponseWriter, request *http.Request) {
+	pathParams := mux.Vars(request)
+	name := pathParams["name"]
+	_, errRead := ioutil.ReadFile(name)
+	if errRead == nil {
+		errExists := errors.New("create: file exists already")
+		handleError(w, errExists, 400)
+	} else {
+		errWrite := ioutil.WriteFile(name, []byte("Test"), 0644)
+		if errWrite == nil {
+			handleRead(w, request)
+		} else {
+			handleError(w, errWrite, 400)
 		}
 	}
+}
 
-	commentID := -1
-	if val, ok := pathParams["commentID"]; ok {
-		commentID, err = strconv.Atoi(val)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"message": "need a number"}`))
-			return
-		}
+func handleRead(w http.ResponseWriter, request *http.Request) {
+	pathParams := mux.Vars(request)
+	name := pathParams["name"]
+	content, errRead := ioutil.ReadFile(name)
+	if errRead == nil {
+		response := fileResponse{name, string(content)}
+		handleFileResponse(w, response)
+	} else {
+		handleError(w, errRead, 400)
 	}
+}
 
-	query := r.URL.Query()
-	location := query.Get("location")
+func handleUpdate(w http.ResponseWriter, request *http.Request) {
+	pathParams := mux.Vars(request)
+	name := pathParams["name"]
+	_, errRead := ioutil.ReadFile(name)
+	if errRead == nil {
+		errWrite := ioutil.WriteFile(name, []byte("Test Updated"), 0644)
+		if errWrite == nil {
+			handleRead(w, request)
+		} else {
+			handleError(w, errWrite, 400)
+		}
+	} else {
+		handleError(w, errRead, 400)
+	}
+}
 
-	w.Write([]byte(fmt.Sprintf(`{"userID": %d, "commentID": %d, "location": "%s" }`, userID, commentID, location)))
+func handleDelete(w http.ResponseWriter, request *http.Request) {
+	pathParams := mux.Vars(request)
+	name := pathParams["name"]
+	errRemove := os.Remove(name)
+	if errRemove == nil {
+		message := []byte("delete: successfully removed file")
+		w.Write(message)
+	} else {
+		handleError(w, errRemove, 400)
+	}
 }
 
 func main() {
-	r := mux.NewRouter()
-
-	api := r.PathPrefix("/api/v1").Subrouter()
-	api.HandleFunc("", get).Methods(http.MethodGet)
-	api.HandleFunc("", post).Methods(http.MethodPost)
-	api.HandleFunc("", put).Methods(http.MethodPut)
-	api.HandleFunc("", delete).Methods(http.MethodDelete)
-
-	api.HandleFunc("/user/{userID}/comment/{commentID}", params).Methods(http.MethodGet)
-
-	log.Fatal(http.ListenAndServe(":8080", r))
+	router := mux.NewRouter()
+	router.HandleFunc("/{name}", handleCreate).Methods(http.MethodPost)
+	router.HandleFunc("/{name}", handleRead).Methods(http.MethodGet)
+	router.HandleFunc("/{name}", handleUpdate).Methods(http.MethodPut)
+	router.HandleFunc("/{name}", handleDelete).Methods(http.MethodDelete)
+	server := http.ListenAndServe(":1234", router)
+	log.Fatal(server)
 }
