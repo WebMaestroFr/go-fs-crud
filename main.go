@@ -1,3 +1,4 @@
+// Package main starts the API server
 package main
 
 import (
@@ -9,110 +10,161 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gorilla/mux"
 )
 
+// FileResponse type is a JSON format for file entries
+type FileResponse struct {
+	Name    string    `json:"name"`    // name and extension
+	Content string    `json:"content"` // text content
+	Path    string    `json:"path"`    // absolute path
+	Size    int64     `json:"size"`    // length in bytes
+	Time    time.Time `json:"time"`    // modification time
+}
+
+// Errors
+var errExists = errors.New("create: file already exists")
+
+// Messages
+var msgRemove = []byte("delete: successfully removed file")
+
+// Variable for -store flag value, path to the file storage directory
 var store string
 
-func storePath(filename string) string {
-	return filepath.Join(store, filename)
+// parseFlags initializes flag variables
+func parseFlags() {
+	flag.StringVar(&store, "store", "./store", "path to the file storage directory")
+	flag.Parse()
 }
 
-type fileResponse struct {
-	Name    string `json:"name"`
-	Content string `json:"content"`
+// getPath returns the path to a file
+func getPath(name string) (path string) {
+	path = filepath.Join(store, name)
+	absPath, errPath := filepath.Abs(path)
+	if errPath == nil {
+		return absPath
+	}
+	return path
 }
 
+// getFilename returns the requested file name and path
+func getFilename(request *http.Request) (name string, path string) {
+	pathParams := mux.Vars(request)
+	name = pathParams["name"]
+	return name, getPath(name)
+}
+
+// handleError responds with a generic HTTP error
 func handleError(w http.ResponseWriter, err error, code int) {
-	http.Error(w, err.Error(), code)
+	errString := err.Error()
+	http.Error(w, errString, code)
 }
 
-func handleFileResponse(w http.ResponseWriter, response fileResponse) {
+// handleResponse responds with a JSON file entry
+func handleResponse(w http.ResponseWriter, response FileResponse) {
 	r, _ := json.Marshal(response)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(r)
 }
 
-func handleCreate(w http.ResponseWriter, request *http.Request) {
-	pathParams := mux.Vars(request)
-	name := pathParams["name"]
-	filename := storePath(name)
-	_, errRead := ioutil.ReadFile(filename)
+// readFile returns the requested file instance or read operation error
+func readFile(request *http.Request) (file FileResponse, errRead error) {
+	var f FileResponse
+	name, path := getFilename(request)
+	content, errRead := ioutil.ReadFile(path)
 	if errRead == nil {
-		errExists := errors.New("create: file exists already")
+		fileInfo, _ := os.Stat(path)
+		f = FileResponse{name, string(content), path, fileInfo.Size(), fileInfo.ModTime()}
+	}
+	return f, errRead
+}
+
+// writeFile stores and returns the submitted file instance or write operation error
+func writeFile(request *http.Request) (file FileResponse, errWrite error) {
+	var f FileResponse
+	_, path := getFilename(request)
+	content, errContent := ioutil.ReadAll(request.Body)
+	if errContent == nil {
+		errWrite := ioutil.WriteFile(path, content, 0644)
+		if errWrite == nil {
+			return readFile(request)
+		}
+		return f, errWrite
+	}
+	return f, errContent
+}
+
+// removeFile removes the requested file or returns a remove operation error
+func removeFile(request *http.Request) (errRemove error) {
+	_, path := getFilename(request)
+	return os.Remove(path)
+}
+
+// handleWrite is a generic "Write File" handler (for handleCreate and handleUpdate)
+func handleWrite(w http.ResponseWriter, request *http.Request) {
+	f, errWrite := writeFile(request)
+	if errWrite == nil {
+		handleResponse(w, f)
+	} else {
+		handleError(w, errWrite, 400)
+	}
+}
+
+// handleCreate is the "Create File" handler for POST requests
+func handleCreate(w http.ResponseWriter, request *http.Request) {
+	_, errRead := readFile(request)
+	if errRead == nil {
 		handleError(w, errExists, 400)
 	} else {
-		content, errContent := ioutil.ReadAll(request.Body)
-		if errContent == nil {
-			errWrite := ioutil.WriteFile(filename, content, 0644)
-			if errWrite == nil {
-				handleRead(w, request)
-			} else {
-				handleError(w, errWrite, 400)
-			}
-		} else {
-			handleError(w, errContent, 400)
-		}
+		handleWrite(w, request)
 	}
 }
 
+// handleRead is the "Read File" handler for GET requests
 func handleRead(w http.ResponseWriter, request *http.Request) {
-	pathParams := mux.Vars(request)
-	name := pathParams["name"]
-	filename := storePath(name)
-	content, errRead := ioutil.ReadFile(filename)
+	f, errRead := readFile(request)
 	if errRead == nil {
-		response := fileResponse{name, string(content)}
-		handleFileResponse(w, response)
+		handleResponse(w, f)
 	} else {
 		handleError(w, errRead, 400)
 	}
 }
 
+// handleUpdate is the "Update File" handler for PUT requests
 func handleUpdate(w http.ResponseWriter, request *http.Request) {
-	pathParams := mux.Vars(request)
-	name := pathParams["name"]
-	filename := storePath(name)
-	_, errRead := ioutil.ReadFile(filename)
+	_, errRead := readFile(request)
 	if errRead == nil {
-		content, errContent := ioutil.ReadAll(request.Body)
-		if errContent == nil {
-			errWrite := ioutil.WriteFile(filename, content, 0644)
-			if errWrite == nil {
-				handleRead(w, request)
-			} else {
-				handleError(w, errWrite, 400)
-			}
-		} else {
-			handleError(w, errContent, 400)
-		}
+		handleWrite(w, request)
 	} else {
 		handleError(w, errRead, 400)
 	}
 }
 
+// handleDelete is the "Delete File" handler for DELETE requests
 func handleDelete(w http.ResponseWriter, request *http.Request) {
-	pathParams := mux.Vars(request)
-	name := pathParams["name"]
-	filename := storePath(name)
-	errRemove := os.Remove(filename)
+	errRemove := removeFile(request)
 	if errRemove == nil {
-		message := []byte("delete: successfully removed file")
-		w.Write(message)
+		w.Write(msgRemove)
 	} else {
 		handleError(w, errRemove, 400)
 	}
 }
 
+// main is the program main running process
 func main() {
-	flag.StringVar(&store, "store", "./store", "path to the file storage directory")
-	flag.Parse()
+	// Initialize flag variables
+	parseFlags()
+	// Create a Router instance
 	router := mux.NewRouter()
+	// Define CRUD handlers
 	router.HandleFunc("/{name}", handleCreate).Methods(http.MethodPost)
 	router.HandleFunc("/{name}", handleRead).Methods(http.MethodGet)
 	router.HandleFunc("/{name}", handleUpdate).Methods(http.MethodPut)
 	router.HandleFunc("/{name}", handleDelete).Methods(http.MethodDelete)
+	// Serve API
 	server := http.ListenAndServe(":1234", router)
+	// Log server errors to console
 	log.Fatal(server)
 }

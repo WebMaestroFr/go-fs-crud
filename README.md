@@ -25,7 +25,7 @@ go run main.go -store=./store
 ### Create
 
 ```sh
-curl --location --request POST 'localhost:1234/test.txt' --header 'Content-Type: text/plain' --data-raw 'Booyaka'
+curl --location --request POST 'localhost:1234/test.txt' --data-raw 'Booyaka'
 ```
 
 ### Read
@@ -37,7 +37,7 @@ curl --location --request GET 'localhost:1234/test.txt'
 ### Update
 
 ```sh
-curl --location --request PUT 'localhost:1234/test.txt' --header 'Content-Type: text/plain' --data-raw 'Boomshakalakasha'
+curl --location --request PUT 'localhost:1234/test.txt' --data-raw 'Boomshakalakasha'
 ```
 
 ### Delete
