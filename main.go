@@ -58,6 +58,12 @@ func getFilename(request *http.Request) (name string, path string) {
 	return name, getPath(name)
 }
 
+// getFilename returns the requested file name and path
+func getFileResponse(name string, content []byte, path string) (f FileResponse) {
+	fileInfo, _ := os.Stat(path)
+	return FileResponse{name, string(content), path, fileInfo.Size(), fileInfo.ModTime()}
+}
+
 // handleError responds with a generic HTTP error
 func handleError(w http.ResponseWriter, err error, code int) {
 	errString := err.Error()
@@ -77,8 +83,7 @@ func readFile(request *http.Request) (file FileResponse, errRead error) {
 	name, path := getFilename(request)
 	content, errRead := ioutil.ReadFile(path)
 	if errRead == nil {
-		fileInfo, _ := os.Stat(path)
-		f = FileResponse{name, string(content), path, fileInfo.Size(), fileInfo.ModTime()}
+		f = getFileResponse(name, content, path)
 	}
 	return f, errRead
 }
@@ -86,12 +91,12 @@ func readFile(request *http.Request) (file FileResponse, errRead error) {
 // writeFile stores and returns the submitted file instance or write operation error
 func writeFile(request *http.Request) (file FileResponse, errWrite error) {
 	var f FileResponse
-	_, path := getFilename(request)
+	name, path := getFilename(request)
 	content, errContent := ioutil.ReadAll(request.Body)
 	if errContent == nil {
 		errWrite := ioutil.WriteFile(path, content, 0644)
 		if errWrite == nil {
-			return readFile(request)
+			f = getFileResponse(name, content, path)
 		}
 		return f, errWrite
 	}
