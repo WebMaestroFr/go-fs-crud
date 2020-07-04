@@ -12,11 +12,17 @@ go run main.go
 
 ### Options
 
-You can define the path to the store directory with the `-store` flag.
-
 ```sh
-go run main.go -store=./store
+go run main.go -port=:1234 -store=./store
 ```
+
+#### `-port`
+
+Port to serve the API on. _(Default: `:1234`)_
+
+#### `-store`
+
+Path to the file storage directory. _(Default: `./store`)_
 
 ## Endpoints
 

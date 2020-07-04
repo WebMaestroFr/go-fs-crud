@@ -30,11 +30,13 @@ var errExists = errors.New("create: file already exists")
 // Messages
 var msgRemove = []byte("delete: successfully removed file")
 
-// Variable for -store flag value, path to the file storage directory
-var store string
+// Variables for flag values
+var port string  // port to serve the API on
+var store string // path to the file storage directory
 
 // parseFlags initializes flag variables
 func parseFlags() {
+	flag.StringVar(&port, "port", ":1234", "port to serve the API on")
 	flag.StringVar(&store, "store", "./store", "path to the file storage directory")
 	flag.Parse()
 }
@@ -164,7 +166,7 @@ func main() {
 	router.HandleFunc("/{name}", handleUpdate).Methods(http.MethodPut)
 	router.HandleFunc("/{name}", handleDelete).Methods(http.MethodDelete)
 	// Serve API
-	server := http.ListenAndServe(":1234", router)
+	server := http.ListenAndServe(port, router)
 	// Log server errors to console
 	log.Fatal(server)
 }
