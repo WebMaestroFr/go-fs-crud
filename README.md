@@ -4,7 +4,7 @@ _Create_, _Read_, _Update_ and _Delete_ on _File System_ with _Go_.
 
 ## Documentation
 
-To start the file server on [port 1234](http://localhost:1234), run the main file of this repo.
+To start the file server on [localhost](http://localhost:1234), run the main file of this repo.
 
 ```sh
 go run main.go
