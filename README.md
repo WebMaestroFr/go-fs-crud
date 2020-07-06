@@ -1,10 +1,10 @@
-# Go F.S. C.R.U.D.
+# F.S. C.R.U.D. A.P.I.
 
-_Create_, _Read_, _Update_ and _Delete_ on _File System_ with _Go_.
+An _Application Programming Interface_ to _Create_, _Read_, _Update_ and _Delete_ on a _File System_.
 
 ## Documentation
 
-To start the file server on [localhost](http://localhost:1234), run the main file of this repo.
+To serve on [localhost](http://localhost:1234), run the main file of this repo.
 
 ```sh
 go run main.go
@@ -50,4 +50,12 @@ curl --request PUT 'localhost:1234/test.txt' --data-raw 'Boomshakalakasha'
 
 ```sh
 curl --request DELETE 'localhost:1234/test.txt'
+```
+
+## Tests
+
+To run the unit tests.
+
+```sh
+go test -cover
 ```

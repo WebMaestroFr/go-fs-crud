@@ -34,13 +34,6 @@ var msgRemove = []byte("delete: successfully removed file")
 var port string  // port to serve the API on
 var store string // path to the file storage directory
 
-// parseFlags initializes flag variables
-func parseFlags() {
-	flag.StringVar(&port, "port", ":1234", "port to serve the API on")
-	flag.StringVar(&store, "store", "./store", "path to the file storage directory")
-	flag.Parse()
-}
-
 // getPath returns the path to a file
 func getPath(name string) (path string) {
 	path = filepath.Join(store, name)
@@ -159,10 +152,13 @@ func handleDelete(w http.ResponseWriter, request *http.Request) {
 	}
 }
 
-// main is the program main running process
-func main() {
+func initializeRouter() *mux.Router {
 	// Initialize flag variables
-	parseFlags()
+	flag.StringVar(&port, "port", ":1234", "port to serve the API on")
+	flag.StringVar(&store, "store", "/tmp/go-fs-crud", "path to the file storage directory")
+	flag.Parse()
+	// Initialize store directory
+	_ = os.Mkdir(store, 0744)
 	// Create a Router instance
 	router := mux.NewRouter()
 	// Define CRUD handlers
@@ -170,6 +166,13 @@ func main() {
 	router.HandleFunc("/{name}", handleRead).Methods(http.MethodGet)
 	router.HandleFunc("/{name}", handleUpdate).Methods(http.MethodPut)
 	router.HandleFunc("/{name}", handleDelete).Methods(http.MethodDelete)
+	return router
+}
+
+// main is the program main running process
+func main() {
+	// Create a Router instance
+	router := initializeRouter()
 	// Serve API
 	server := http.ListenAndServe(port, router)
 	// Log server errors to console
