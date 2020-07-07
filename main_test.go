@@ -71,6 +71,24 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestStore(t *testing.T) {
+	_, err := os.Stat(store)
+	// Check if store dir exists.
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestError(t *testing.T) {
+	res := testRequest(t, "GET", "/error.txt", nil)
+	// Check the status code is what we expect.
+	if status := res.Code; status != http.StatusBadRequest {
+		t.Log(res.Body)
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusBadRequest)
+	}
+}
+
 func TestMain(m *testing.M) {
 	// Initialize flag variables
 	router = initializeRouter()

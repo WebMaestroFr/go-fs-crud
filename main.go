@@ -35,26 +35,23 @@ var port string  // port to serve the API on
 var store string // path to the file storage directory
 
 // getPath returns the path to a file
-func getPath(name string) (path string) {
+func getPath(name string) (path string, err error) {
 	path = filepath.Join(store, name)
-	absPath, errPath := filepath.Abs(path)
-	if errPath == nil {
-		return absPath
-	}
-	return path
+	return filepath.Abs(path)
 }
 
 // getFilename returns the requested file name and path
-func getFilename(request *http.Request) (name string, path string) {
+func getFilename(request *http.Request) (name string, path string, err error) {
 	pathParams := mux.Vars(request)
 	name = pathParams["name"]
-	return name, getPath(name)
+	path, errPath := getPath(name)
+	return name, path, errPath
 }
 
 // getFilename returns the requested file name and path
-func getFileResponse(name string, content []byte, path string) (f FileResponse) {
-	fileInfo, _ := os.Stat(path)
-	return FileResponse{name, string(content), path, fileInfo.Size(), fileInfo.ModTime()}
+func getFileResponse(name string, content []byte, path string) (f FileResponse, err error) {
+	fileInfo, errStat := os.Stat(path)
+	return FileResponse{name, string(content), path, fileInfo.Size(), fileInfo.ModTime()}, errStat
 }
 
 // handleError responds with a generic HTTP error
@@ -65,40 +62,53 @@ func handleError(w http.ResponseWriter, err error, code int) {
 
 // handleResponse responds with a JSON file entry
 func handleResponse(w http.ResponseWriter, response FileResponse) {
-	r, _ := json.Marshal(response)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(r)
+	r, errJSON := json.Marshal(response)
+	if errJSON != nil {
+		handleError(w, errJSON, http.StatusInternalServerError)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(r)
+	}
 }
 
 // readFile returns the requested file instance or read operation error
-func readFile(request *http.Request) (file FileResponse, errRead error) {
+func readFile(request *http.Request) (file FileResponse, err error) {
 	var f FileResponse
-	name, path := getFilename(request)
-	content, errRead := ioutil.ReadFile(path)
-	if errRead == nil {
-		f = getFileResponse(name, content, path)
+	name, path, errFile := getFilename(request)
+	if errFile != nil {
+		return f, errFile
 	}
-	return f, errRead
+	content, errRead := ioutil.ReadFile(path)
+	if errRead != nil {
+		return f, errRead
+	}
+	return getFileResponse(name, content, path)
 }
 
 // writeFile stores and returns the submitted file instance or write operation error
-func writeFile(request *http.Request) (file FileResponse, errWrite error) {
+func writeFile(request *http.Request) (file FileResponse, err error) {
 	var f FileResponse
-	name, path := getFilename(request)
+	name, path, errFile := getFilename(request)
+	if errFile != nil {
+		return f, errFile
+	}
 	content, errContent := ioutil.ReadAll(request.Body)
-	if errContent == nil {
-		errWrite := ioutil.WriteFile(path, content, 0644)
-		if errWrite == nil {
-			f = getFileResponse(name, content, path)
-		}
+	if errContent != nil {
+		return f, errContent
+	}
+	errWrite := ioutil.WriteFile(path, content, 0644)
+	if errWrite != nil {
 		return f, errWrite
 	}
-	return f, errContent
+	return getFileResponse(name, content, path)
 }
 
 // removeFile removes the requested file or returns a remove operation error
-func removeFile(request *http.Request) (errRemove error) {
-	_, path := getFilename(request)
+func removeFile(request *http.Request) (err error) {
+	_, path, errFile := getFilename(request)
+	if errFile != nil {
+		return errFile
+	}
 	return os.Remove(path)
 }
 
@@ -108,7 +118,7 @@ func handleWrite(w http.ResponseWriter, request *http.Request) {
 	if errWrite == nil {
 		handleResponse(w, f)
 	} else {
-		handleError(w, errWrite, 400)
+		handleError(w, errWrite, http.StatusBadRequest)
 	}
 }
 
@@ -116,7 +126,7 @@ func handleWrite(w http.ResponseWriter, request *http.Request) {
 func handleCreate(w http.ResponseWriter, request *http.Request) {
 	_, errRead := readFile(request)
 	if errRead == nil {
-		handleError(w, errExists, 400)
+		handleError(w, errExists, http.StatusBadRequest)
 	} else {
 		handleWrite(w, request)
 	}
@@ -128,7 +138,7 @@ func handleRead(w http.ResponseWriter, request *http.Request) {
 	if errRead == nil {
 		handleResponse(w, f)
 	} else {
-		handleError(w, errRead, 400)
+		handleError(w, errRead, http.StatusBadRequest)
 	}
 }
 
@@ -138,7 +148,7 @@ func handleUpdate(w http.ResponseWriter, request *http.Request) {
 	if errRead == nil {
 		handleWrite(w, request)
 	} else {
-		handleError(w, errRead, 400)
+		handleError(w, errRead, http.StatusBadRequest)
 	}
 }
 
@@ -148,7 +158,7 @@ func handleDelete(w http.ResponseWriter, request *http.Request) {
 	if errRemove == nil {
 		w.Write(msgRemove)
 	} else {
-		handleError(w, errRemove, 400)
+		handleError(w, errRemove, http.StatusBadRequest)
 	}
 }
 
@@ -158,7 +168,10 @@ func initializeRouter() *mux.Router {
 	flag.StringVar(&store, "store", "/tmp/go-fs-crud", "path to the file storage directory")
 	flag.Parse()
 	// Initialize store directory
-	_ = os.Mkdir(store, 0744)
+	errDir := os.Mkdir(store, 0744)
+	if errDir != nil {
+		log.Print(errDir)
+	}
 	// Create a Router instance
 	router := mux.NewRouter()
 	// Define CRUD handlers

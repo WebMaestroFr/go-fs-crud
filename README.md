@@ -57,5 +57,5 @@ curl --request DELETE 'localhost:1234/test.txt'
 To run the unit tests.
 
 ```sh
-go test -cover
+go test -cover -v
 ```
