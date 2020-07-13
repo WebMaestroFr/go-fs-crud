@@ -1,0 +1,23 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: fs-api-app
+  name: fs-api-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fs-api-app
+  template:
+    metadata:
+      labels:
+        app: fs-api-app
+    spec:
+      containers:
+        - image: fs-api-image
+          name: fs-api-container
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
